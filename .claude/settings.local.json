@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:openai.github.io)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "Bash(rm:*)"
+    ],
+    "deny": []
+  }
+}
