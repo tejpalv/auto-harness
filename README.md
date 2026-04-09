@@ -1,172 +1,63 @@
-# Göd Agent: Recursive Self-Improving Large Language Models
+# göd-agent
 
-## Motivation
+A self-improving AI agent in 169 lines. One tool: bash. One loop. It grows by writing Python mods that hot-reload into its own runtime.
 
-Traditional AI agents are static - they're built with a fixed set of tools, prompts, and configurations that remain unchanged throughout their operation. But what if an agent could evolve and adapt its own capabilities based on the tasks it encounters?
+## How it works
 
-This project demonstrates a revolutionary approach: **an AI agent that continuously improves itself**. After each interaction, the agent analyzes its own performance and makes strategic modifications to become more effective at future tasks.
+The agent is a while loop: user input → LLM → tool calls → repeat. The only tool is `bash`, which can do anything — run code, edit files, curl APIs, install packages.
 
-### Why Self-Improving Agents Matter
+The trick: `~/.god-agent/mods/` contains Python files that are `exec()`'d into the agent's global namespace every turn. The agent can write mods via bash that replace its own functions, add tools, or change its model — mid-session, no restart.
 
-- **Adaptive Intelligence**: Instead of requiring manual reconfiguration for different tasks, the agent automatically adapts its toolkit and approach
-- **Emergent Capabilities**: The agent discovers and adds new tools as needed, expanding its abilities beyond its initial design
-- **Performance Optimization**: System prompts and parameters are continuously refined based on real-world usage patterns
-- **Multi-Agent Orchestration**: The agent can create specialized sub-agents to handle complex tasks that require different expertise
-
-### The Vision
-
-Imagine an agent that starts simple but becomes increasingly sophisticated as it encounters diverse challenges. This is not just automation - it's **adaptive automation** that gets smarter with every interaction.
-
-## Features
-
-This project implements a self-improving AI agent that can modify its own components after each interaction:
-
-### Core Self-Improvement Capabilities
-- **Dynamic Tool Management**: Starts minimal, adds tools as needed based on task requirements
-- **Automatic Prompt Optimization**: System prompt evolves to become more effective for encountered task types
-- **Model Parameter Tuning**: Temperature and other settings adjust based on performance analysis
-- **Agent Orchestration**: Can create and manage specialized sub-agents for complex multi-step tasks
-
-### Advanced Features
-- **Performance Tracking**: Detailed metrics and analysis for each interaction
-- **Multi-Agent Analysis**: Parallel execution of specialized agents for comprehensive task handling
-- **Beautiful Terminal Output**: Color-coded, timestamped logs showing the agent's evolution
-- **Conversation Memory**: Maintains context across interactions while continuously improving
-
-## How It Works
-
-The self-improvement cycle follows this pattern:
-
-1. **Execution**: Agent attempts to handle a user query with current capabilities
-2. **Analysis**: Performance is evaluated using a separate AI model (Claude Opus 4)
-3. **Improvement**: Based on analysis, the agent modifies itself:
-   - Adds relevant tools from its registry
-   - Updates system prompt for better task handling
-   - Adjusts model parameters for optimal performance
-   - Creates specialized sub-agents when beneficial
-4. **Retry**: If significant improvements were made, re-runs the query with enhanced capabilities
-5. **Learning**: Records improvements for future reference
-
-This creates an agent that becomes increasingly capable and specialized for the types of tasks it encounters.
-
-## Requirements
-
-- Python 3.8+
-- OpenAI API key (for the agents framework)
-- OpenRouter API key (optional, can use OpenAI key)
-
-## Installation
-
-```bash
-pip install openai-agents colorama python-dotenv aiohttp
+```
+you:   "add streaming"
+agent: writes ~/.god-agent/mods/01_streaming.py (replaces chat() with streaming version)
+       → mod is exec'd into globals after the bash command
+       → streaming works on the same turn
 ```
 
 ## Setup
 
-Create a `.env` file in the project directory:
-```
-OPENAI_API_KEY=your-openai-key
-OPENROUTER_API_KEY=your-openrouter-key  # Optional, will use OPENAI_API_KEY if not set
-```
-
-Note: OpenRouter supports using your OpenAI API key, so you can use the same key for both.
-
-## Usage
-
-Run the self-improving agent:
 ```bash
+pip install -r requirements.txt
+cp .env.example .env
+# add your OpenRouter key to .env
 python self_improving_agent.py
 ```
 
-### Interactive Commands
+## What mods can do
 
-- Type any prompt to interact with the agent
-- `status` - Show current agent configuration and improvement history
-- `quit` or `exit` - Exit the program
+A mod is a `.py` file in `~/.god-agent/mods/` that gets exec'd into the agent's globals. It can:
 
-### Comparison Mode
+- Replace `chat()` (e.g. add streaming, change output format)
+- Replace `run_bash()` (e.g. add Docker sandboxing)
+- Mutate the `tools` list (e.g. add a web_search tool)
+- Reassign `MODEL` (e.g. switch to a cheaper model)
+- Reassign `SYSTEM` (e.g. add persistent instructions)
+- Anything — it's just Python in the same namespace
 
-To see the self-improving agent vs standard agent comparison:
-```bash
-python self_improving_agent.py --compare
-```
-
-## Available Tools
-
-The agent can dynamically add these tools based on task requirements:
-
-### Basic Tools
-- `calculate`: Evaluate mathematical expressions
-- `get_current_time`: Get current date and time
-- `create_memory`: Store key-value pairs for later use
-- `recall_memory`: Retrieve stored information
-- `word_count`: Count words in text
-- `reverse_text`: Reverse text strings
-- `format_list`: Format comma-separated lists
-- `web_search`: Search the web for information
-
-### Advanced Agent Orchestration
-- `create_and_run_agent`: Create specialized sub-agents with custom instructions and tools
-- `analyze_with_multiple_agents`: Deploy multiple specialized agents in parallel for comprehensive analysis
-
-## Agent Orchestration Examples
-
-The agent can create specialized sub-agents for complex tasks:
-
-### Single Sub-Agent Creation
-```
-User: "Use a specialized math agent to calculate compound interest"
-→ Agent creates MathAgent with calculate tools and mathematical instructions
-→ Delegates the calculation task to the specialized agent
-→ Returns comprehensive mathematical analysis
-```
-
-### Multi-Agent Analysis
-```
-User: "Analyze this text with multiple perspectives"
-→ Agent creates SummaryAgent, SentimentAgent, KeywordAgent in parallel
-→ Each agent analyzes the text from their specialized perspective
-→ Results are combined into comprehensive analysis
-```
-
-## Example Interaction
-
-```
-User: "Calculate the area of a circle with radius 5, then analyze this sentence for word count"
-
-Agent Evolution:
-1. Initial: Only has calculate and get_current_time tools
-2. Analysis: Realizes it needs word_count tool for complete task handling
-3. Improvement: Adds word_count tool and updates prompt
-4. Retry: Successfully handles both parts of the query
-5. Result: More capable agent for future mathematical + text analysis tasks
-```
+Mods are sorted by filename (`01_`, `02_`, ...) and tracked by mtime so only new/changed files are re-exec'd.
 
 ## Architecture
 
 ```
-SelfImprovingAgent
-├── AgentState (current configuration)
-│   ├── System Prompt (evolves)
-│   ├── Available Tools (grows dynamically)
-│   ├── Model Settings (optimizes)
-│   └── Improvement History (tracks changes)
-├── Tool Registry (all possible tools)
-├── Performance Analysis (Claude Opus 4)
-└── Agent Orchestration (sub-agent creation)
+main()                          ← unkillable supervisor, defined last, never replaced
+  reload_mods()                 ← exec new/changed .py files from ~/.god-agent/mods/
+  globals()["chat"](messages)   ← dispatch to latest chat(), even if a mod just replaced it
 
-Flow:
-User Query → Agent Execution → Performance Analysis → Self-Improvement → Enhanced Agent
+chat()                          ← replaceable by mods
+  while True:
+    LLM call (MODEL, tools)
+    if text response → print, return
+    if tool calls → run bash, append results
+      reload_mods()             ← check if bash just wrote a new mod
+      if globals()["chat"] is not chat → hand off to new version
 ```
 
-## The Future of Adaptive AI
+Two reload points: before every user turn (in `main()`), and after every batch of tool calls (in `chat()`). Both dispatch through `globals()` so replacements take effect immediately.
 
-This project demonstrates a fundamental shift from static to adaptive AI systems. Instead of building agents with fixed capabilities, we can create agents that evolve and specialize based on the challenges they encounter.
+## Files
 
-The implications are profound:
-- **Personalized AI**: Agents that adapt to individual user needs and preferences
-- **Emergent Intelligence**: Capabilities that emerge from the interaction of self-improvement and real-world tasks
-- **Scalable Expertise**: Single agents that can develop specialized knowledge across multiple domains
-- **Continuous Learning**: Systems that get better over time without manual intervention
-
-This is just the beginning of what's possible when we give AI the ability to improve itself.
+```
+self_improving_agent.py    ← the entire agent (169 lines, git-tracked, read-only)
+~/.god-agent/mods/         ← user's accumulated growth (persists across sessions)
+```
